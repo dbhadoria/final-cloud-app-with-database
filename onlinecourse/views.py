@@ -122,7 +122,16 @@ def enroll(request, course_id):
 #            choice_id = int(value)
 #            submitted_anwsers.append(choice_id)
 #    return submitted_anwsers
-
+def submit(request, course_id):
+    user = request.user
+    course = Course.objects.get(id=course_id)
+    enrollment = Enrollment.objects.get(user=user, course=course)
+    submission = Submission.objects.create(enrollment=enrollment)
+    selected_choices = request.POST.getlist('choices')
+    for choice_id in selected_choices:
+        choice = Choice.objects.get(id=choice_id)
+        submission.choices.add(choice)
+    return redirect('show_exam_result', submission_id=submission.id)
 
 # <HINT> Create an exam result view to check if learner passed exam and show their question results and result for each question,
 # you may implement it based on the following logic:
@@ -131,6 +140,24 @@ def enroll(request, course_id):
         # For each selected choice, check if it is a correct answer or not
         # Calculate the total score
 #def show_exam_result(request, course_id, submission_id):
+def show_exam_result(request, course_id, submission_id):
+    course = Course.objects.get(id=course_id)
+    submission = Submission.objects.get(id=submission_id)
+    selected_choice_ids = submission.choices.values_list('id', flat=True)
+    total_score = course.question_set.aggregate(total_score=models.Sum('grade'))['total_score']
+    question_results = []
+    for question in course.question_set.all():
+        selected = question.choices.filter(id__in=selected_choice_ids)
+        is_correct = selected.filter(is_correct=True).exists()
+        question_results.append({'question': question, 'selected': selected, 'is_correct': is_correct})
+    context = {
+        'course': course,
+        'selected_ids': selected_choice_ids,
+        'grade': submission.grade,
+        'question_results': question_results,
+        'total_score': total_score
+    }
 
+    return render(request, 'onlinecourse/exam_result.html', context)
 
 
